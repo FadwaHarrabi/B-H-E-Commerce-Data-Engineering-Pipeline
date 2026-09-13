@@ -1,0 +1,182 @@
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+  image: bhp-airflow:3.3.1
+
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:admin@postgres:5432/airflow
+    AIRFLOW_CONN_BHP_POSTGRES: postgresql://postgres:admin@postgres:5432/bhphotovideo
+
+    AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY}
+    AIRFLOW__API_AUTH__JWT_SECRET: ${JWT_SECRET}
+
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "airflow:admin"
+
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    PYTHONPATH: /opt/airflow
+
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./WebScraping:/opt/airflow/WebScraping
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./config:/opt/airflow/config
+    - ./database:/opt/airflow/database
+    - ./Data:/opt/airflow/Data
+
+
+  networks:
+    - my_network
+
+
+services:
+
+  # ==========================================================
+  # PostgreSQL
+  # ==========================================================
+
+  postgres:
+    image: postgres:16
+
+    container_name: bhp_postgres
+
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: airflow
+
+    ports:
+      - "5439:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - my_network
+
+
+  # ==========================================================
+  # pgAdmin
+  # ==========================================================
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+
+    container_name: bhp_pgadmin
+
+    restart: unless-stopped
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: fadwaharrabi58@gmail.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+
+    ports:
+      - "8087:80"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - my_network
+
+
+  # ==========================================================
+  # Airflow database initialization
+  # ==========================================================
+
+  airflow-init:
+    <<: *airflow-common
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+
+    command:
+      - bash
+      - -c
+      - |
+        airflow db migrate
+
+
+  # ==========================================================
+  # Airflow API Server
+  # ==========================================================
+
+  airflow-apiserver:
+    <<: *airflow-common
+
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    ports:
+      - "8083:8080"
+
+    command: api-server
+
+
+  # ==========================================================
+  # Airflow Scheduler
+  # ==========================================================
+
+  airflow-scheduler:
+    <<: *airflow-common
+
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+    command: scheduler
+
+
+  # ==========================================================
+  # Airflow DAG Processor
+  # ==========================================================
+
+  airflow-dag-processor:
+    <<: *airflow-common
+
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+    command: dag-processor
+  flyway:
+    image: flyway/flyway:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      -url=jdbc:postgresql://postgres:5432/bhphotovideo
+      -user=postgres
+      -password=admin
+      -locations=filesystem:/flyway/sql
+      migrate
+    volumes:
+      - ./database:/flyway/sql
+    networks:
+      - my_network
+
+
+volumes:
+  postgres_data:
+
+
+networks:
+  my_network:
+    driver: bridge
