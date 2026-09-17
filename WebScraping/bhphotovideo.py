@@ -19,94 +19,96 @@ category_filters = []
 products=[]
 
 
-async def worker(worker_id, page, semaphore,queue ):
+async def worker(worker_id,semaphore,queue ):
+    async with AsyncCamoufox(headless=True, humanize=True, window=(1280, 720)) as browser:
+        page = await browser.new_page()
 
-    while True:
-        job = await queue.get()
+        while True:
+            job = await queue.get()
 
-        try:
-            url = job["url"]
-            level = job["level"]
-            parent_id = job["parent_id"]
-
-            print(
-                f"\nWorker {worker_id} GOT JOB\n"
-                f"Level: {level}\n"
-                f"URL: {url}"
-            )
-
-            async with semaphore:
+            try:
+                url = job["url"]
+                level = job["level"]
+                parent_id = job["parent_id"]
 
                 print(
-                    f"Worker {worker_id} PROCESSING: {url}"
+                    f"\nWorker {worker_id} GOT JOB\n"
+                    f"Level: {level}\n"
+                    f"URL: {url}"
                 )
 
-                if level == "Department":
+                async with semaphore:
 
-                    await get_categories(
-                        page,
-                        url,
-                        parent_id,
-                        queue
+                    print(
+                        f"Worker {worker_id} PROCESSING: {url}"
                     )
 
-                elif level == "Category1":
+                    if level == "Department":
 
-                    await get_sub_category_group(
-                        page,
-                        url,
-                        parent_id,
-                        queue
+                        await get_categories(
+                            page,
+                            url,
+                            parent_id,
+                            queue
+                        )
+
+                    elif level == "Category1":
+
+                        await get_sub_category_group(
+                            page,
+                            url,
+                            parent_id,
+                            queue
+                        )
+
+                    elif level == "Category2":
+
+                        await get_all_products(
+                            page,
+                            url,
+                            category_code=parent_id
+                        )
+
+                    elif level == "SubCategory1":
+
+                        await get_sub_sub_category_group(
+                            page,
+                            url,
+                            parent_id,
+                            queue
+                        )
+
+                    elif level == "SubCategory2":
+
+                        await get_all_products(
+                            page,
+                            url,
+                            subcategory_code=parent_id
+                        )
+
+                    elif level == "SubSubCategory":
+
+                        await get_all_products(
+                            page,
+                            url,
+                            subsubcategory_code=parent_id
+                        )
+
+                    print(
+                        f"Worker {worker_id} FINISHED: {url}"
                     )
 
-                elif level == "Category2":
-
-                    await get_all_products(
-                        page,
-                        url,
-                        category_code=parent_id
-                    )
-
-                elif level == "SubCategory1":
-
-                    await get_sub_sub_category_group(
-                        page,
-                        url,
-                        parent_id,
-                        queue
-                    )
-
-                elif level == "SubCategory2":
-
-                    await get_all_products(
-                        page,
-                        url,
-                        subcategory_code=parent_id
-                    )
-
-                elif level == "SubSubCategory":
-
-                    await get_all_products(
-                        page,
-                        url,
-                        subsubcategory_code=parent_id
-                    )
+            except Exception as e:
 
                 print(
-                    f"Worker {worker_id} FINISHED: {url}"
+                    f"\n❌ WORKER {worker_id} ERROR"
                 )
+                print(f"URL: {job.get('url')}")
+                print(f"LEVEL: {job.get('level')}")
+                print(f"ERROR: {repr(e)}")
 
-        except Exception as e:
-
-            print(
-                f"\n❌ WORKER {worker_id} ERROR"
-            )
-            print(f"URL: {job.get('url')}")
-            print(f"LEVEL: {job.get('level')}")
-            print(f"ERROR: {repr(e)}")
-
-        finally:
-            queue.task_done()
+            finally:
+                queue.task_done()
 
 async def fetch_page(page, url):
 
@@ -410,50 +412,34 @@ async def get_all_products(page,url,category_code=None,subcategory_code=None,sub
         url = next_url
         page_number += 1
 async def main():
-    async with AsyncCamoufox(headless=True,
-                            humanize=True,
-                            window=(1280, 720)) as browser:
-        queue=asyncio.Queue()
-        semaphore=asyncio.Semaphore(NUM_WORKERS)
-        pages=[]
-        for i in range(NUM_WORKERS):
-            page = await browser.new_page()
-            pages.append(page)
-            
-        tasks = []
-        for i in range(NUM_WORKERS):
-            task = asyncio.create_task(
-                worker(
-                    i,
-                    pages[i],
-                    semaphore,
-                    queue
-                    
-                )
-            )
-            tasks.append(task)
-        await get_department(
-                    pages[0],
-                    BASE_URL,
-                    queue
-                )
-        
-        await queue.join()
+    queue = asyncio.Queue()
+    semaphore = asyncio.Semaphore(NUM_WORKERS)
 
-       # Wait until all jobs are finished
-        for task in tasks:
-            task.cancel()
-        with open ('/opt/airflow/Data/department.json','w',encoding='utf-8') as f:
-                json.dump(department,f,ensure_ascii=False,indent=4)
-        with open('/opt/airflow/Data/categories.json','w',encoding='utf-8') as f:
-            json.dump(categories,f,ensure_ascii=False,indent=4)
-        with open('/opt/airflow/Data/subcategories_group.json','w',encoding='utf-8') as f:
-            json.dump(subcategories_group,f,ensure_ascii=False,indent=4)
-        with open('/opt/airflow/Data/subsubcategory_group.json','w',encoding='utf-8') as f:
-            json.dump(subsubcategories_group,f,ensure_ascii=False,indent=4)
-        with open('/opt/airflow/Data/filters.json','w',encoding='utf-8') as f:
-            json.dump(category_filters,f,ensure_ascii=False,indent=4)
-        with open('/opt/airflow/Data/products.json','w',encoding='utf-8') as f:
-            json.dump(products,f,ensure_ascii=False,indent=4)
+    tasks = [
+        asyncio.create_task(worker(i, semaphore, queue))
+        for i in range(NUM_WORKERS)
+    ]
+
+    # Need one throwaway page just to fetch the department list
+    async with AsyncCamoufox(headless=True) as browser:
+        page = await browser.new_page()
+        await get_department(page, BASE_URL, queue)
+
+    await queue.join()
+
+    for task in tasks:
+        task.cancel()
+    with open ('/opt/airflow/Data/department.json','w',encoding='utf-8') as f:
+            json.dump(department,f,ensure_ascii=False,indent=4)
+    with open('/opt/airflow/Data/categories.json','w',encoding='utf-8') as f:
+        json.dump(categories,f,ensure_ascii=False,indent=4)
+    with open('/opt/airflow/Data/subcategories_group.json','w',encoding='utf-8') as f:
+        json.dump(subcategories_group,f,ensure_ascii=False,indent=4)
+    with open('/opt/airflow/Data/subsubcategory_group.json','w',encoding='utf-8') as f:
+        json.dump(subsubcategories_group,f,ensure_ascii=False,indent=4)
+    with open('/opt/airflow/Data/filters.json','w',encoding='utf-8') as f:
+        json.dump(category_filters,f,ensure_ascii=False,indent=4)
+    with open('/opt/airflow/Data/products.json','w',encoding='utf-8') as f:
+        json.dump(products,f,ensure_ascii=False,indent=4)
 # if __name__=="__main__":
 #     asyncio.run(main())
