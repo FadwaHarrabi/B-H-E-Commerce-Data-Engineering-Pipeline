@@ -4,6 +4,8 @@ x-airflow-common: &airflow-common
     dockerfile: Dockerfile
 
   image: bhp-airflow:3.3.1
+  shm_size: '2gb'
+
 
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor

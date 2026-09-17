@@ -443,17 +443,17 @@ async def main():
        # Wait until all jobs are finished
         for task in tasks:
             task.cancel()
-        with open ('opt/airflow/Data/department.json','w',encoding='utf-8') as f:
+        with open ('/opt/airflow/Data/department.json','w',encoding='utf-8') as f:
                 json.dump(department,f,ensure_ascii=False,indent=4)
-        with open('opt/airflow/Data/categories.json','w',encoding='utf-8') as f:
+        with open('/opt/airflow/Data/categories.json','w',encoding='utf-8') as f:
             json.dump(categories,f,ensure_ascii=False,indent=4)
-        with open('opt/airflow/Data/subcategories_group.json','w',encoding='utf-8') as f:
+        with open('/opt/airflow/Data/subcategories_group.json','w',encoding='utf-8') as f:
             json.dump(subcategories_group,f,ensure_ascii=False,indent=4)
-        with open('opt/airflow/Data/subsubcategory_group.json','w',encoding='utf-8') as f:
+        with open('/opt/airflow/Data/subsubcategory_group.json','w',encoding='utf-8') as f:
             json.dump(subsubcategories_group,f,ensure_ascii=False,indent=4)
-        with open('opt/airflow/Data/filters.json','w',encoding='utf-8') as f:
+        with open('/opt/airflow/Data/filters.json','w',encoding='utf-8') as f:
             json.dump(category_filters,f,ensure_ascii=False,indent=4)
-        with open('opt/airflow/Data/products.json','w',encoding='utf-8') as f:
+        with open('/opt/airflow/Data/products.json','w',encoding='utf-8') as f:
             json.dump(products,f,ensure_ascii=False,indent=4)
 # if __name__=="__main__":
 #     asyncio.run(main())
